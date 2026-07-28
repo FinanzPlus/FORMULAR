@@ -44,14 +44,17 @@ const upload = multer({
   }
 });
 
-// Configuration de Nodemailer
+// Configuration de Nodemailer — T-online SMTP
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.protonmail.com',
+  host: process.env.EMAIL_HOST || 'securesmtp.t-online.de',
   port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false,
+  secure: false, // STARTTLS sur le port 587
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
+  },
+  tls: {
+    rejectUnauthorized: true
   }
 });
 
@@ -61,162 +64,187 @@ app.get('/', (req, res) => {
 });
 
 // Route pour soumettre le formulaire
-app.post('/api/submit-application', upload.single('identityDocument'), async (req, res) => {
-  try {
-    const {
-      nom,
-      prenom,
-      age,
-      sexe,
-      adresse,
-      telephone,
-      travail,
-      salaireMensuel,
-      accepteConfidentialite
-    } = req.body;
+// Accepte deux fichiers : rectoFile (Vorderseite) et versoFile (Rückseite)
+app.post(
+  '/api/submit-application',
+  upload.fields([
+    { name: 'rectoFile', maxCount: 1 },
+    { name: 'versoFile', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        nom,
+        prenom,
+        age,
+        sexe,
+        adresse,
+        telephone,
+        travail,
+        salaireMensuel,
+        accepteConfidentialite
+      } = req.body;
 
-    // Validation des champs obligatoires
-    if (!nom || !prenom || !age || !sexe || !adresse || !telephone || !travail || !salaireMensuel) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tous les champs obligatoires doivent être remplis.'
-      });
-    }
+      // Validation des champs obligatoires
+      if (!nom || !prenom || !age || !sexe || !adresse || !telephone || !travail || !salaireMensuel) {
+        return res.status(400).json({
+          success: false,
+          message: 'Alle Pflichtfelder müssen ausgefüllt werden.'
+        });
+      }
 
-    if (accepteConfidentialite !== 'true') {
-      return res.status(400).json({
-        success: false,
-        message: 'Vous devez accepter la clause de confidentialité.'
-      });
-    }
+      if (accepteConfidentialite !== 'true') {
+        return res.status(400).json({
+          success: false,
+          message: 'Sie müssen die Vertraulichkeitsklausel akzeptieren.'
+        });
+      }
 
-    // Vérification de la pièce d'identité
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'La pièce d\'identité est obligatoire.'
-      });
-    }
+      // Vérification des deux fichiers
+      const rectoDoc = req.files && req.files['rectoFile'] && req.files['rectoFile'][0];
+      const versoDoc = req.files && req.files['versoFile'] && req.files['versoFile'][0];
 
-    const identityDoc = req.file;
-    const isImage = ['.jpg', '.jpeg', '.png'].includes(path.extname(identityDoc.originalname).toLowerCase());
+      if (!rectoDoc || !versoDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Beide Seiten des Ausweises (Vorderseite und Rückseite) sind erforderlich.'
+        });
+      }
 
-    // Préparation de l'email HTML
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me',
-      subject: `Nouvelle demande — ${prenom} ${nom}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #1f2328;">
-          <div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">FinanzPlus Austria</h1>
-            <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0;">Nouvelle demande reçue</p>
-          </div>
+      const isRectoImage = ['.jpg', '.jpeg', '.png'].includes(path.extname(rectoDoc.originalname).toLowerCase());
+      const isVersoImage = ['.jpg', '.jpeg', '.png'].includes(path.extname(versoDoc.originalname).toLowerCase());
 
-          <div style="padding: 30px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none;">
+      // Préparation des pièces jointes
+      const attachments = [
+        {
+          filename: `vorderseite_${nom}_${prenom}${path.extname(rectoDoc.originalname)}`,
+          path: rectoDoc.path,
+          ...(isRectoImage ? { cid: 'recto_doc' } : {})
+        },
+        {
+          filename: `rueckseite_${nom}_${prenom}${path.extname(versoDoc.originalname)}`,
+          path: versoDoc.path,
+          ...(isVersoImage ? { cid: 'verso_doc' } : {})
+        }
+      ];
 
-            <h2 style="color: #667eea; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">📋 Informations personnelles</h2>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Nom de famille</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${nom}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Prénom</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${prenom}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Âge</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${age} ans</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Sexe</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${sexe}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Adresse</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${adresse}</td>
-              </tr>
-            </table>
+      // Préparation de l'email HTML
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me',
+        subject: `Kreditantrag FinanzPlus Austria — ${prenom} ${nom}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; color: #1f2328;">
+            <div style="background: #1a3a6e; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">FinanzPlus Austria</h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0;">Neuer Kreditantrag eingegangen</p>
+            </div>
 
-            <h2 style="color: #667eea; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">📞 Coordonnées</h2>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Numéro de téléphone</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${telephone}</td>
-              </tr>
-            </table>
+            <div style="padding: 30px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none;">
 
-            <h2 style="color: #667eea; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">💼 Informations professionnelles</h2>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Profession</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${travail}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Salaire mensuel</td>
-                <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${salaireMensuel} €</td>
-              </tr>
-            </table>
+              <h2 style="color: #1a3a6e; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">📋 Persönliche Informationen</h2>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Nachname</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${nom}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Vorname</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${prenom}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Alter</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${age} Jahre</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Geschlecht</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${sexe}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Adresse</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${adresse}</td>
+                </tr>
+              </table>
 
-            <h2 style="color: #667eea; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">🪪 Pièce d'identité</h2>
-            <p style="margin-bottom: 15px;">
-              La pièce d'identité est jointe en pièce jointe à cet email
-              (<strong>${identityDoc.originalname}</strong>).
-              ${isImage ? 'Un aperçu est disponible ci-dessous.' : ''}
-            </p>
-            ${isImage ? `<img src="cid:identity_doc" alt="Pièce d'identité" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 20px;" />` : ''}
+              <h2 style="color: #1a3a6e; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">📞 Kontaktdaten</h2>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Telefonnummer</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${telephone}</td>
+                </tr>
+              </table>
 
-            <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; border-radius: 0 6px 6px 0; margin-top: 10px;">
-              <strong style="color: #065f46;">✅ Clause de confidentialité acceptée</strong>
-              <p style="margin: 6px 0 0 0; font-size: 13px; color: #065f46;">
-                Le demandeur confirme avoir lu et accepté l'accord de confidentialité entre lui et FinanzPlus Austria.
+              <h2 style="color: #1a3a6e; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">💼 Berufliche Informationen</h2>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; width: 40%; border: 1px solid #e5e7eb;">Beruf</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${travail}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 12px; background: #f7f8fa; font-weight: 600; border: 1px solid #e5e7eb;">Monatliches Gehalt</td>
+                  <td style="padding: 10px 12px; border: 1px solid #e5e7eb;">${salaireMensuel} €</td>
+                </tr>
+              </table>
+
+              <h2 style="color: #1a3a6e; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px;">🪪 Ausweisdokument</h2>
+              <p style="margin-bottom: 15px;">
+                Beide Seiten des Ausweises sind als Anhang beigefügt:<br>
+                • <strong>Vorderseite:</strong> ${rectoDoc.originalname}<br>
+                • <strong>Rückseite:</strong> ${versoDoc.originalname}
+              </p>
+              ${isRectoImage ? `<p style="font-weight:600;margin:4px 0;">Vorderseite:</p><img src="cid:recto_doc" alt="Vorderseite" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 12px;" />` : ''}
+              ${isVersoImage ? `<p style="font-weight:600;margin:4px 0;">Rückseite:</p><img src="cid:verso_doc" alt="Rückseite" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 20px;" />` : ''}
+
+              <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; border-radius: 0 6px 6px 0; margin-top: 10px;">
+                <strong style="color: #065f46;">✅ Vertraulichkeitsklausel akzeptiert</strong>
+                <p style="margin: 6px 0 0 0; font-size: 13px; color: #065f46;">
+                  Der Antragsteller bestätigt, die Vertraulichkeitsvereinbarung zwischen ihm und FinanzPlus Austria gelesen und akzeptiert zu haben.
+                </p>
+              </div>
+            </div>
+
+            <div style="padding: 15px 30px; background: #f7f8fa; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+              <p style="margin: 0; font-size: 12px; color: #57606a;">
+                Einreichungsdatum: ${new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}
               </p>
             </div>
           </div>
+        `,
+        attachments
+      };
 
-          <div style="padding: 15px 30px; background: #f7f8fa; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <p style="margin: 0; font-size: 12px; color: #57606a;">
-              Date de soumission : ${new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}
-            </p>
-          </div>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: `piece_identite_${nom}_${prenom}${path.extname(identityDoc.originalname)}`,
-          path: identityDoc.path,
-          ...(isImage ? { cid: 'identity_doc' } : {})
-        }
-      ]
-    };
+      // Envoi de l'email
+      await transporter.sendMail(mailOptions);
 
-    // Envoi de l'email
-    await transporter.sendMail(mailOptions);
+      // Suppression des fichiers temporaires après envoi
+      try { fs.unlinkSync(rectoDoc.path); } catch (_) {}
+      try { fs.unlinkSync(versoDoc.path); } catch (_) {}
 
-    // Suppression du fichier temporaire après envoi
-    fs.unlinkSync(identityDoc.path);
+      res.json({
+        success: true,
+        message: 'Ihr Antrag wurde erfolgreich eingereicht. Wir werden uns sehr bald bei Ihnen melden.'
+      });
 
-    res.json({
-      success: true,
-      message: 'Votre demande a été soumise avec succès. Nous vous contacterons très prochainement.'
-    });
+    } catch (error) {
+      console.error('Fehler bei der Einreichung:', error);
 
-  } catch (error) {
-    console.error('Erreur lors de la soumission:', error);
+      // Nettoyage des fichiers en cas d'erreur
+      if (req.files) {
+        ['rectoFile', 'versoFile'].forEach(field => {
+          if (req.files[field] && req.files[field][0]) {
+            try { fs.unlinkSync(req.files[field][0].path); } catch (_) {}
+          }
+        });
+      }
 
-    // Nettoyage du fichier en cas d'erreur
-    if (req.file) {
-      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      res.status(500).json({
+        success: false,
+        message: 'Ein Fehler ist bei der Einreichung aufgetreten. Bitte versuchen Sie es erneut.',
+        error: error.message
+      });
     }
-
-    res.status(500).json({
-      success: false,
-      message: 'Une erreur est survenue lors de la soumission. Veuillez réessayer.',
-      error: error.message
-    });
   }
-});
+);
 
 // Gestion des erreurs Multer
 app.use((error, req, res, next) => {
@@ -224,21 +252,22 @@ app.use((error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'Le fichier est trop volumineux. Taille maximale : 10 Mo.'
+        message: 'Die Datei ist zu groß. Maximale Größe: 10 MB.'
       });
     }
   }
 
   res.status(500).json({
     success: false,
-    message: error.message || 'Une erreur est survenue'
+    message: error.message || 'Ein Fehler ist aufgetreten'
   });
 });
 
 // Démarrage du serveur
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur FinanzPlus Austria démarré sur le port ${PORT}`);
-  console.log(`📧 Email de destination: ${process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me'}`);
+  console.log(`🚀 Server FinanzPlus Austria gestartet auf Port ${PORT}`);
+  console.log(`📧 Ziel-E-Mail: ${process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me'}`);
+  console.log(`📤 SMTP-Host: ${process.env.EMAIL_HOST || 'securesmtp.t-online.de'}`);
 });
 
 // Made with Bob

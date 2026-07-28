@@ -104,7 +104,7 @@ function App() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -112,49 +112,40 @@ function App() {
       return;
     }
 
-    const subject = encodeURIComponent(`Kreditantrag FinanzPlus Austria — ${formData.prenom} ${formData.nom}`);
+    setSubmitStatus({ type: 'info', message: 'Ihre Anfrage wird gesendet, bitte warten…' });
 
-    const body = encodeURIComponent(
-`KREDITANTRAG — FINANZPLUS AUSTRIA
-=====================================
+    try {
+      const data = new FormData();
+      Object.entries(formData).forEach(([key, val]) => data.append(key, val));
+      data.append('rectoFile', rectoFile);
+      data.append('versoFile', versoFile);
 
-PERSÖNLICHE INFORMATIONEN
---------------------------
-Nachname:             ${formData.nom}
-Vorname:              ${formData.prenom}
-Alter:                ${formData.age} Jahre
-Geschlecht:           ${formData.sexe}
-Adresse:              ${formData.adresse}
+      const response = await fetch(
+        process.env.REACT_APP_API_URL
+          ? `${process.env.REACT_APP_API_URL}/api/submit-application`
+          : '/api/submit-application',
+        { method: 'POST', body: data }
+      );
 
-KONTAKTDATEN
-------------
-Telefonnummer:        ${formData.telephone}
+      const result = await response.json();
 
-BERUFLICHE INFORMATIONEN
-------------------------
-Beruf:                ${formData.travail}
-Monatliches Gehalt:   ${formData.salaireMensuel} €
-
-AUSWEISDOKUMENT
----------------
-⚠️ Bitte fügen Sie beide Seiten Ihres Ausweises als Anhang hinzu, bevor Sie senden:
-   • Vorderseite (Recto): ${rectoFile ? rectoFile.name : '-'}
-   • Rückseite (Verso):   ${versoFile ? versoFile.name : '-'}
-
-VERTRAULICHKEIT
----------------
-✓ Der Antragsteller hat die Vertraulichkeitsvereinbarung gelesen und akzeptiert.
-
-=====================================
-Einreichungsdatum: ${new Date().toLocaleString('de-DE')}`
-    );
-
-    window.location.href = `mailto:kontakt_finanzplusaustria@proton.me?subject=${subject}&body=${body}`;
-
-    setSubmitStatus({
-      type: 'success',
-      message: 'Ihr E-Mail-Programm wurde geöffnet. Bitte vergessen Sie nicht, Ihr Ausweisdokument als Anhang hinzuzufügen, bevor Sie senden!'
-    });
+      if (response.ok && result.success) {
+        setSubmitStatus({
+          type: 'success',
+          message: 'Ihr Antrag wurde erfolgreich übermittelt. Wir werden uns sehr bald bei Ihnen melden!'
+        });
+      } else {
+        setSubmitStatus({
+          type: 'error',
+          message: result.message || 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.'
+        });
+      }
+    } catch (err) {
+      setSubmitStatus({
+        type: 'error',
+        message: 'Verbindungsfehler. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.'
+      });
+    }
   };
 
   return (
