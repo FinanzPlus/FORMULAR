@@ -274,7 +274,7 @@ app.use((error, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server FinanzPlus Austria gestartet auf Port ${PORT}`);
   console.log(`📧 Ziel-E-Mail: ${process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me'}`);
-  console.log(`📤 SMTP-Host: ${process.env.EMAIL_HOST || 'securesmtp.t-online.de'}`);
+  console.log(`📤 SMTP: Gmail (${process.env.EMAIL_USER || 'non configuré'})`);
 });
 
 // Made with Bob
