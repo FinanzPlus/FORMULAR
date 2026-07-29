@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
@@ -44,14 +44,8 @@ const upload = multer({
   }
 });
 
-// Configuration de Nodemailer — Gmail SMTP
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// Configuration Resend (API HTTP — fonctionne sur Render gratuit)
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Route de test
 app.get('/health', (req, res) => {
@@ -121,23 +115,21 @@ app.post(
       const isRectoImage = ['.jpg', '.jpeg', '.png'].includes(path.extname(rectoDoc.originalname).toLowerCase());
       const isVersoImage = ['.jpg', '.jpeg', '.png'].includes(path.extname(versoDoc.originalname).toLowerCase());
 
-      // Préparation des pièces jointes
+      // Préparation des pièces jointes pour Resend
       const attachments = [
         {
           filename: `vorderseite_${nom}_${prenom}${path.extname(rectoDoc.originalname)}`,
-          path: rectoDoc.path,
-          ...(isRectoImage ? { cid: 'recto_doc' } : {})
+          content: fs.readFileSync(rectoDoc.path)
         },
         {
           filename: `rueckseite_${nom}_${prenom}${path.extname(versoDoc.originalname)}`,
-          path: versoDoc.path,
-          ...(isVersoImage ? { cid: 'verso_doc' } : {})
+          content: fs.readFileSync(versoDoc.path)
         }
       ];
 
       // Préparation de l'email HTML
       const mailOptions = {
-        from: process.env.EMAIL_USER,
+        from: 'FinanzPlus Austria <onboarding@resend.dev>',
         to: process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me',
         subject: `Kreditantrag FinanzPlus Austria — ${prenom} ${nom}`,
         html: `
@@ -199,8 +191,6 @@ app.post(
                 • <strong>Vorderseite:</strong> ${rectoDoc.originalname}<br>
                 • <strong>Rückseite:</strong> ${versoDoc.originalname}
               </p>
-              ${isRectoImage ? `<p style="font-weight:600;margin:4px 0;">Vorderseite:</p><img src="cid:recto_doc" alt="Vorderseite" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 12px;" />` : ''}
-              ${isVersoImage ? `<p style="font-weight:600;margin:4px 0;">Rückseite:</p><img src="cid:verso_doc" alt="Rückseite" style="max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 20px;" />` : ''}
 
               <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 15px; border-radius: 0 6px 6px 0; margin-top: 10px;">
                 <strong style="color: #065f46;">✅ Vertraulichkeitsklausel akzeptiert</strong>
@@ -220,8 +210,8 @@ app.post(
         attachments
       };
 
-      // Envoi de l'email
-      await transporter.sendMail(mailOptions);
+      // Envoi de l'email via Resend (API HTTP)
+      await resend.emails.send(mailOptions);
 
       // Suppression des fichiers temporaires après envoi
       try { fs.unlinkSync(rectoDoc.path); } catch (_) {}
@@ -274,7 +264,7 @@ app.use((error, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server FinanzPlus Austria gestartet auf Port ${PORT}`);
   console.log(`📧 Ziel-E-Mail: ${process.env.EMAIL_DEST || 'kontakt_finanzplusaustria@proton.me'}`);
-  console.log(`📤 SMTP: Gmail (${process.env.EMAIL_USER || 'non configuré'})`);
+  console.log(`📤 Email: Resend API (${process.env.RESEND_API_KEY ? 'clé configurée' : '⚠️ clé manquante'})`);
 });
 
 // Made with Bob
