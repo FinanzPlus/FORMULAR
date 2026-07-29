@@ -1,0 +1,24 @@
+{
+  "name": "finanzplus-austria-backend",
+  "version": "1.0.0",
+  "description": "Backend API pour le formulaire d'éligibilité au prêt FinanzPlus Austria",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["finanzplus", "austria", "loan", "form", "api"],
+  "author": "FinanzPlus Austria",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
