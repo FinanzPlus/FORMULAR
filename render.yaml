@@ -2,8 +2,9 @@ services:
   - type: web
     name: FORMULAR
     env: node
+    rootDir: backend
     buildCommand: npm install && npm run build
-    startCommand: node backend/server.js
+    startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
