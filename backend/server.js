@@ -44,17 +44,12 @@ const upload = multer({
   }
 });
 
-// Configuration de Nodemailer — T-online SMTP
+// Configuration de Nodemailer — Gmail SMTP
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'securesmtp.t-online.de',
-  port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false, // STARTTLS sur le port 587
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: true
   }
 });
 
