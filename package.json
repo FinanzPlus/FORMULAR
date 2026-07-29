@@ -4,6 +4,7 @@
   "description": "Backend API pour le formulaire d'éligibilité au prêt FinanzPlus Austria",
   "main": "backend/server.js",
   "scripts": {
+    "build": "cd frontend && npm install && npm run build",
     "start": "node backend/server.js",
     "dev": "nodemon backend/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
