@@ -64,13 +64,16 @@ app.get('/health', (req, res) => {
 });
 
 // Servir le build React (frontend)
-const buildPath = path.join(__dirname, '../frontend/build');
-if (fs.existsSync(buildPath)) {
-  app.use(express.static(buildPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(buildPath, 'index.html'));
-  });
-}
+const buildPath = path.join(__dirname, '..', 'frontend', 'build');
+app.use(express.static(buildPath));
+app.get('*', (req, res) => {
+  const indexFile = path.join(buildPath, 'index.html');
+  if (fs.existsSync(indexFile)) {
+    res.sendFile(indexFile);
+  } else {
+    res.json({ message: 'API FinanzPlus Austria - Serveur actif', build: 'pending' });
+  }
+});
 
 // Route pour soumettre le formulaire
 // Accepte deux fichiers : rectoFile (Vorderseite) et versoFile (Rückseite)
